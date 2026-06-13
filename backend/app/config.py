@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +11,12 @@ class Settings(BaseSettings):
     limitless_api_base: str = "https://api.limitless.ai/v1"
 
     database_url: str = "sqlite:///./limitless.db"
+
+    # Extra CORS origins (comma-separated) on top of localhost dev defaults,
+    # e.g. the deployed frontend URL. A regex can also be supplied to match
+    # Vercel preview deployments.
+    cors_origins: str = ""
+    cors_origin_regex: str = ""
 
     pinecone_api_key: str = ""
     pinecone_index_name: str = "limitless-lifelogs"
@@ -40,6 +47,29 @@ class Settings(BaseSettings):
 
     # Limitless allows 180 requests/minute; stay safely under it.
     requests_per_minute: int = 150
+
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, value: str) -> str:
+        """Managed Postgres (Railway/Heroku) hands out `postgres://` or
+        `postgresql://` URLs, which SQLAlchemy resolves to the psycopg2 dialect.
+        We ship psycopg3 (`psycopg[binary]`), so steer to the psycopg3 driver.
+        """
+        for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://", "sqlite"):
+            if value.startswith(prefix):
+                return value
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value[len("postgresql://"):]
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value[len("postgres://"):]
+        return value
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        defaults = ["http://localhost:3000", "http://127.0.0.1:3000"]
+        extra = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        return defaults + extra
 
 
 @lru_cache
