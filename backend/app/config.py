@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     chat_model: str = "gpt-4o"
     router_model: str = "gpt-4o-mini"
 
+    # Optional dedicated provider for graph entity-extraction (Graphiti). Bulk
+    # extraction is heavy/structured and benefits from a fast, reliable model
+    # (e.g. OpenAI gpt-4o-mini) even when chat runs on a different provider.
+    # When graph_llm_api_key is empty, extraction falls back to the openai_* /
+    # chat_model settings above. Embeddings always stay local (see graph svc).
+    graph_llm_api_key: str = ""
+    graph_llm_base_url: str | None = None
+    graph_llm_model: str = ""
+
     enable_graph_ingestion: bool = False
 
     # IANA timezone for interpreting dates in queries ("today", "last week").

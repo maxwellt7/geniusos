@@ -110,14 +110,31 @@ class GraphService:
         from graphiti_core.cross_encoder.bge_reranker_client import BGERerankerClient
         from graphiti_core.llm_client.config import LLMConfig
 
+        # Prefer a dedicated graph-extraction provider when configured; otherwise
+        # reuse the chat provider. Only the LLM swaps — the embedder stays local
+        # so the vector space matches previously-ingested episodes.
+        if settings.graph_llm_api_key:
+            llm_api_key = settings.graph_llm_api_key
+            llm_base_url = settings.graph_llm_base_url or None
+            llm_model = settings.graph_llm_model or settings.chat_model
+            small_model = settings.graph_llm_model or settings.router_model
+        else:
+            llm_api_key = settings.openai_api_key
+            llm_base_url = settings.openai_base_url
+            llm_model = settings.chat_model
+            small_model = settings.router_model
+
         llm_config = LLMConfig(
-            api_key=settings.openai_api_key,
-            model=settings.chat_model,
-            small_model=settings.router_model,
-            base_url=settings.openai_base_url,
+            api_key=llm_api_key,
+            model=llm_model,
+            small_model=small_model,
+            base_url=llm_base_url,
         )
         llm_client = TolerantOpenAIGenericClient(
             config=llm_config, structured_output_mode="json_object"
+        )
+        logger.info(
+            "GraphService LLM: model=%s base_url=%s", llm_model, llm_base_url or "openai-default"
         )
 
         self._graphiti = Graphiti(
