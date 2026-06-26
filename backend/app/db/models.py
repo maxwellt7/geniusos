@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -58,8 +59,10 @@ class Utterance(Base):
     text: Mapped[str] = mapped_column(Text)
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    start_offset_ms: Mapped[int | None] = mapped_column(Integer)
-    end_offset_ms: Mapped[int | None] = mapped_column(Integer)
+    # Limitless sometimes emits absolute epoch-ms offsets (~1.7e12), which
+    # overflow a 32-bit Postgres INTEGER. SQLite's dynamic ints hid this.
+    start_offset_ms: Mapped[int | None] = mapped_column(BigInteger)
+    end_offset_ms: Mapped[int | None] = mapped_column(BigInteger)
 
     lifelog: Mapped[Lifelog] = relationship(back_populates="utterances")
 
