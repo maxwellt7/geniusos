@@ -12,3 +12,4 @@ pinecone>=5.4
 graphiti-core>=0.5
 sentence-transformers>=3.0
 tiktoken>=0.8
+pyjwt[crypto]>=2.9

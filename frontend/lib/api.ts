@@ -10,9 +10,24 @@ export function getOwnerToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
-function authHeaders(): Record<string, string> {
-  const token = getOwnerToken();
-  return token ? { "X-Owner-Token": token } : {};
+async function authHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  const owner = getOwnerToken();
+  if (owner) headers["X-Owner-Token"] = owner;
+  if (typeof window !== "undefined") {
+    try {
+      const clerk = (
+        window as unknown as {
+          Clerk?: { session?: { getToken: () => Promise<string | null> } };
+        }
+      ).Clerk;
+      const token = clerk?.session ? await clerk.session.getToken() : null;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    } catch {
+      // Clerk not ready / not signed in — fall through unauthenticated.
+    }
+  }
+  return headers;
 }
 
 export interface PrivacyStatus {
@@ -22,7 +37,7 @@ export interface PrivacyStatus {
 
 export async function fetchPrivacyStatus(): Promise<PrivacyStatus> {
   const res = await fetch(`${API_BASE}/api/privacy/status`, {
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) throw new Error("Failed to load privacy status");
   return res.json();
@@ -44,7 +59,7 @@ export async function unlockOwner(pin: string): Promise<boolean> {
 export async function lockOwner(): Promise<void> {
   await fetch(`${API_BASE}/api/privacy/lock`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   sessionStorage.removeItem(TOKEN_KEY);
 }
@@ -121,7 +136,7 @@ export async function streamChat(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify({ message, history }),
     signal,
   });
@@ -171,7 +186,7 @@ export class OwnerRequiredError extends Error {
 
 export async function fetchLifelogs(limit = 50): Promise<LifelogSummary[]> {
   const res = await fetch(`${API_BASE}/api/lifelogs?limit=${limit}`, {
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (res.status === 403) throw new OwnerRequiredError();
   if (!res.ok) throw new Error("Failed to load lifelogs");
@@ -181,7 +196,7 @@ export async function fetchLifelogs(limit = 50): Promise<LifelogSummary[]> {
 
 export async function fetchLifelog(id: string): Promise<LifelogDetail> {
   const res = await fetch(`${API_BASE}/api/lifelogs/${id}`, {
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (res.status === 403) throw new OwnerRequiredError();
   if (!res.ok) throw new Error("Failed to load lifelog");
@@ -189,7 +204,9 @@ export async function fetchLifelog(id: string): Promise<LifelogDetail> {
 }
 
 export async function fetchSyncStatus(): Promise<SyncStatus> {
-  const res = await fetch(`${API_BASE}/api/sync/status`);
+  const res = await fetch(`${API_BASE}/api/sync/status`, {
+    headers: await authHeaders(),
+  });
   if (!res.ok) throw new Error("Failed to load sync status");
   return res.json();
 }
@@ -197,7 +214,7 @@ export async function fetchSyncStatus(): Promise<SyncStatus> {
 export async function triggerSync(full = false): Promise<void> {
   const res = await fetch(`${API_BASE}/api/sync?full=${full}`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (res.status === 403) throw new OwnerRequiredError();
   if (!res.ok && res.status !== 409) {

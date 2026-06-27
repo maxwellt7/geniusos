@@ -38,9 +38,18 @@ def _purge_expired() -> None:
         _sessions.pop(token, None)
 
 
-def resolve_mode(x_owner_token: str | None = Header(default=None)) -> str:
+def resolve_mode(
+    x_owner_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+) -> str:
     """FastAPI dependency: returns 'owner' or 'guest' for this request."""
     settings = get_settings()
+    # A valid Clerk session is the owner: sign-up is allowlisted to the owner,
+    # so anyone who can authenticate via Clerk is the owner.
+    from app.auth.clerk import clerk_user_from_header
+
+    if clerk_user_from_header(authorization):
+        return "owner"
     if not settings.owner_pin:
         return "owner"
     _purge_expired()

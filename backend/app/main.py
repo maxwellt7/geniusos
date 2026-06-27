@@ -3,7 +3,10 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi import Depends
+
 from app.api import chat, lifelogs, privacy, sync
+from app.auth.clerk import require_clerk_user
 from app.config import get_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -22,10 +25,13 @@ if _settings.cors_origin_regex:
 
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
-app.include_router(chat.router, prefix="/api")
-app.include_router(sync.router, prefix="/api")
-app.include_router(lifelogs.router, prefix="/api")
-app.include_router(privacy.router, prefix="/api")
+# All data/API routers require a valid Clerk session when REQUIRE_CLERK_AUTH is
+# on (the dependency is a no-op otherwise). /api/health stays open for Railway.
+_auth = [Depends(require_clerk_user)]
+app.include_router(chat.router, prefix="/api", dependencies=_auth)
+app.include_router(sync.router, prefix="/api", dependencies=_auth)
+app.include_router(lifelogs.router, prefix="/api", dependencies=_auth)
+app.include_router(privacy.router, prefix="/api", dependencies=_auth)
 
 
 @app.get("/api/health")

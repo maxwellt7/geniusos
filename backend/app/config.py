@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     graph_llm_base_url: str | None = None
     graph_llm_model: str = ""
 
+    # Clerk backend auth. When require_clerk_auth is true, API routes require a
+    # valid Clerk session JWT (verified against the issuer's JWKS); a valid
+    # session is treated as owner. clerk_jwt_issuer is the Clerk Frontend API
+    # origin, e.g. https://clerk.maxmayes.io. clerk_authorized_parties is a
+    # comma-separated list of allowed `azp` origins (the app domains).
+    clerk_jwt_issuer: str = ""
+    clerk_authorized_parties: str = ""
+    require_clerk_auth: bool = False
+
     enable_graph_ingestion: bool = False
 
     # IANA timezone for interpreting dates in queries ("today", "last week").
@@ -73,6 +82,10 @@ class Settings(BaseSettings):
         if value.startswith("postgres://"):
             return "postgresql+psycopg://" + value[len("postgres://"):]
         return value
+
+    @property
+    def authorized_parties_list(self) -> list[str]:
+        return [p.strip() for p in self.clerk_authorized_parties.split(",") if p.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:
