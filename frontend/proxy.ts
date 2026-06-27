@@ -15,6 +15,11 @@ export default clerkMiddleware(async (auth, req) => {
 
 export const config = {
   matcher: [
+    // Clerk proxies clerk-js through /__clerk/* by default (enabled in
+    // clerkMiddleware); the middleware must run on those .js paths or they 404
+    // and the app renders blank. Match it explicitly BEFORE the static-file
+    // exclusion below (which would otherwise skip *.js).
+    "/__clerk/(.*)",
     // Skip Next internals and static files, unless found in search params
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     // Always run for API routes
