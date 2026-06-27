@@ -24,7 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider afterSignOutUrl="/">
+    <ClerkProvider
+      afterSignOutUrl="/"
+      clerkJSUrl="https://clerk.maxmayes.io/npm/@clerk/clerk-js@6/dist/clerk.browser.js"
+    >
       <html lang="en" className="dark">
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100`}
