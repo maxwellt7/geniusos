@@ -23,17 +23,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // clerkJSUrl forces the script-tag hotload of clerk-js. @clerk/nextjs's
-  // default entry-chunk loader fails on the Next 16 Turbopack production build
-  // (failed_to_load_clerk_js -> blank screen). It's a valid runtime option but
-  // not in NextClerkProviderProps' types, so pass it via a cast.
-  const clerkProps = {
-    afterSignOutUrl: "/",
-    clerkJSUrl:
-      "https://clerk.maxmayes.io/npm/@clerk/clerk-js@6/dist/clerk.browser.js",
-  } as unknown as React.ComponentProps<typeof ClerkProvider>;
   return (
-    <ClerkProvider {...clerkProps}>
+    <ClerkProvider afterSignOutUrl="/">
       <html lang="en" className="dark">
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100`}
