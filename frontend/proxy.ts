@@ -2,7 +2,14 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Everything except Clerk's own sign-in/sign-up routes requires a session.
 // Unauthenticated requests are redirected to the Clerk sign-in (account portal).
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+// /__clerk is Clerk's own clerk-js + Frontend API proxy path — it must be
+// reachable WITHOUT a session (you need clerk-js to sign in), or the gate
+// redirects it to /sign-in and clerk-js never loads (blank screen).
+const isPublicRoute = createRouteMatcher([
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/__clerk(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
