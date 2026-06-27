@@ -24,13 +24,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider afterSignOutUrl="/">
       <html lang="en" className="dark">
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100`}
         >
           <div className="fixed right-4 top-4 z-50">
-            <UserButton afterSignOutUrl="/" />
+            <UserButton />
           </div>
           {children}
         </body>
