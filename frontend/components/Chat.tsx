@@ -27,6 +27,7 @@ export default function Chat() {
   const [privacyMode, setPrivacyMode] = useState<"owner" | "guest" | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatsRefreshKey, setChatsRefreshKey] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const newChat = () => {
@@ -144,17 +145,53 @@ export default function Chat() {
 
   return (
     <div className="flex h-dvh">
-      <Sidebar
-        mode={privacyMode}
-        onModeChange={setPrivacyMode}
-        onOpenLifelog={(id) => setActiveLifelogId(id)}
-        activeChatId={sessionId}
-        onSelectChat={openChat}
-        onNewChat={newChat}
-        chatsRefreshKey={chatsRefreshKey}
-      />
+      {/* Mobile: sidebar becomes a slide-in drawer behind a backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <div
+        className={`fixed inset-y-0 left-0 z-40 transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <Sidebar
+          mode={privacyMode}
+          onModeChange={setPrivacyMode}
+          onOpenLifelog={(id) => {
+            setActiveLifelogId(id);
+            setSidebarOpen(false);
+          }}
+          activeChatId={sessionId}
+          onSelectChat={(id) => {
+            openChat(id);
+            setSidebarOpen(false);
+          }}
+          onNewChat={() => {
+            newChat();
+            setSidebarOpen(false);
+          }}
+          chatsRefreshKey={chatsRefreshKey}
+        />
+      </div>
 
       <main className="flex-1 flex flex-col min-w-0">
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-950">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+            className="text-zinc-300 hover:text-zinc-100 text-xl leading-none cursor-pointer"
+          >
+            ☰
+          </button>
+          <h1 className="font-semibold tracking-tight">
+            Limitless <span className="text-indigo-400">Chat</span>
+          </h1>
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
             {messages.length === 0 && (
