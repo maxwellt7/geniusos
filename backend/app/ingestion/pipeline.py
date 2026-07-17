@@ -9,7 +9,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 # Re-fetch a small window before the watermark to catch late edits.
 WATERMARK_OVERLAP = timedelta(hours=1)
+
+
+def _total_lifelogs(session: Session) -> int:
+    return session.execute(select(func.count()).select_from(Lifelog)).scalar() or 0
 
 
 def get_or_create_sync_state(session: Session) -> SyncState:
@@ -149,7 +153,9 @@ def run_sync(full: bool = False) -> dict:
                 logger.info("Synced %d lifelogs so far...", synced)
                 with db_session() as session:
                     state = get_or_create_sync_state(session)
-                    state.lifelogs_synced = synced
+                    # Total in the DB, not this run's count: incremental runs
+                    # would otherwise shrink the sidebar's "Synced N lifelogs".
+                    state.lifelogs_synced = _total_lifelogs(session)
                     state.last_updated_at = max_updated
 
         with db_session() as session:
@@ -157,7 +163,7 @@ def run_sync(full: bool = False) -> dict:
             state.last_updated_at = max_updated
             state.last_sync_finished = utcnow()
             state.last_sync_status = "success"
-            state.lifelogs_synced = synced
+            state.lifelogs_synced = _total_lifelogs(session)
     except Exception as exc:
         logger.exception("Sync failed")
         with db_session() as session:

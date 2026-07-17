@@ -5,13 +5,23 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import Depends
 
+from contextlib import asynccontextmanager
+
 from app.api import chat, lifelogs, privacy, sync
+from app.api.sync import start_sync_scheduler
 from app.auth.clerk import require_clerk_user
 from app.config import get_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-app = FastAPI(title="Limitless Lifelog Query System", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    start_sync_scheduler()
+    yield
+
+
+app = FastAPI(title="Limitless Lifelog Query System", version="0.1.0", lifespan=lifespan)
 
 _settings = get_settings()
 _cors_kwargs = dict(

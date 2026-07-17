@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # Limitless allows 180 requests/minute; stay safely under it.
     requests_per_minute: int = 150
 
+    # Minutes between automatic incremental syncs (0 disables the scheduler).
+    sync_interval_minutes: int = 30
+
 
     @field_validator("database_url")
     @classmethod
