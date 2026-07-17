@@ -10,23 +10,33 @@ export function getOwnerToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
+type ClerkGlobal = {
+  loaded?: boolean;
+  session?: { getToken: () => Promise<string | null> };
+};
+
+async function clerkToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { Clerk?: ClerkGlobal };
+  // Clerk's JS hot-loads after hydration. Requests fired on mount would go
+  // out without auth (backend 401s -> UI wrongly falls back to guest mode),
+  // so wait briefly for Clerk before giving up on a token.
+  for (let i = 0; i < 40 && !w.Clerk?.loaded; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  try {
+    return w.Clerk?.session ? await w.Clerk.session.getToken() : null;
+  } catch {
+    return null; // not signed in — fall through unauthenticated
+  }
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
   const owner = getOwnerToken();
   if (owner) headers["X-Owner-Token"] = owner;
-  if (typeof window !== "undefined") {
-    try {
-      const clerk = (
-        window as unknown as {
-          Clerk?: { session?: { getToken: () => Promise<string | null> } };
-        }
-      ).Clerk;
-      const token = clerk?.session ? await clerk.session.getToken() : null;
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-    } catch {
-      // Clerk not ready / not signed in — fall through unauthenticated.
-    }
-  }
+  const token = await clerkToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
