@@ -124,15 +124,18 @@ async def retrieve(session: Session, routed: RoutedQuery) -> RetrievedContext:
     """Orchestrate retrieval across layers based on the routed intent."""
     ctx = RetrievedContext()
 
+    # top_k values sized for depth: Claude's context comfortably fits the
+    # extra excerpts, and richer context is what lets follow-ups like "tell
+    # me more" surface new material instead of re-treading the same chunks.
     if routed.intent == "relational":
-        ctx.facts = await _graph_search(routed)
+        ctx.facts = await _graph_search(routed, num_results=16)
         # Vector search supplements graph facts with verbatim transcript context.
-        ctx.chunks = _semantic_search(routed, top_k=6)
+        ctx.chunks = _semantic_search(routed, top_k=10)
     elif routed.intent == "temporal":
         ctx.lifelogs = _temporal_search(session, routed)
         if routed.search_query:
-            ctx.chunks = _semantic_search(routed, top_k=6)
+            ctx.chunks = _semantic_search(routed, top_k=10)
     else:  # semantic
-        ctx.chunks = _semantic_search(routed, top_k=12)
+        ctx.chunks = _semantic_search(routed, top_k=20)
 
     return ctx

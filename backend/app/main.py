@@ -7,7 +7,7 @@ from fastapi import Depends
 
 from contextlib import asynccontextmanager
 
-from app.api import chat, lifelogs, privacy, sync
+from app.api import chat, chats, lifelogs, privacy, sync
 from app.api.sync import start_sync_scheduler
 from app.auth.clerk import require_clerk_user
 from app.config import get_settings
@@ -39,6 +39,7 @@ app.add_middleware(CORSMiddleware, **_cors_kwargs)
 # on (the dependency is a no-op otherwise). /api/health stays open for Railway.
 _auth = [Depends(require_clerk_user)]
 app.include_router(chat.router, prefix="/api", dependencies=_auth)
+app.include_router(chats.router, prefix="/api", dependencies=_auth)
 app.include_router(sync.router, prefix="/api", dependencies=_auth)
 app.include_router(lifelogs.router, prefix="/api", dependencies=_auth)
 app.include_router(privacy.router, prefix="/api", dependencies=_auth)

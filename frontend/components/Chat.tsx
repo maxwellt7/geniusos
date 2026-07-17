@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Citation, ChatTurn, fetchPrivacyStatus, streamChat } from "@/lib/api";
+import {
+  Citation,
+  ChatTurn,
+  fetchChatSession,
+  fetchPrivacyStatus,
+  streamChat,
+} from "@/lib/api";
 import ChatMessage, { UiMessage } from "./ChatMessage";
 import Sidebar from "./Sidebar";
 import TranscriptDrawer from "./TranscriptDrawer";
@@ -19,7 +25,34 @@ export default function Chat() {
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const [activeLifelogId, setActiveLifelogId] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState<"owner" | "guest" | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [chatsRefreshKey, setChatsRefreshKey] = useState(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const newChat = () => {
+    setMessages([]);
+    setSessionId(null);
+    setActiveCitation(null);
+  };
+
+  const openChat = async (id: string) => {
+    try {
+      const detail = await fetchChatSession(id);
+      setSessionId(detail.id);
+      setMessages(
+        detail.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          citations: m.citations?.length ? m.citations : undefined,
+          routing: m.routing ?? undefined,
+        }))
+      );
+      setActiveCitation(null);
+    } catch {
+      // deleted or unreachable — fall back to a fresh chat
+      newChat();
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -30,6 +63,16 @@ export default function Chat() {
       .then((s) => setPrivacyMode(s.mode))
       .catch(() => setPrivacyMode("guest"));
   }, []);
+
+  // Locking hands the screen to a guest: wipe the owner's conversation.
+  useEffect(() => {
+    if (privacyMode === "guest") {
+      setMessages([]);
+      setSessionId(null);
+      setActiveCitation(null);
+      setActiveLifelogId(null);
+    }
+  }, [privacyMode]);
 
   // Re-check periodically: the server relocks owner sessions after idle timeout.
   useEffect(() => {
@@ -66,14 +109,28 @@ export default function Chat() {
     };
 
     try {
-      await streamChat(trimmed, history, {
-        onRouting: (routing) => update((m) => ({ ...m, routing })),
-        onCitations: (citations) => update((m) => ({ ...m, citations })),
-        onToken: (token) =>
-          update((m) => ({ ...m, content: m.content + token })),
-        onError: (message) => update((m) => ({ ...m, error: message })),
-        onDone: () => update((m) => ({ ...m, streaming: false })),
-      });
+      await streamChat(
+        trimmed,
+        history,
+        {
+          onSession: (id) => {
+            setSessionId(id);
+            setChatsRefreshKey((k) => k + 1);
+          },
+          onRouting: (routing) => update((m) => ({ ...m, routing })),
+          onCitations: (citations) =>
+            update((m) => ({
+              ...m,
+              citations: citations.length ? citations : undefined,
+            })),
+          onToken: (token) =>
+            update((m) => ({ ...m, content: m.content + token })),
+          onError: (message) => update((m) => ({ ...m, error: message })),
+          onDone: () => update((m) => ({ ...m, streaming: false })),
+        },
+        undefined,
+        sessionId
+      );
     } catch (e) {
       update((m) => ({
         ...m,
@@ -91,6 +148,10 @@ export default function Chat() {
         mode={privacyMode}
         onModeChange={setPrivacyMode}
         onOpenLifelog={(id) => setActiveLifelogId(id)}
+        activeChatId={sessionId}
+        onSelectChat={openChat}
+        onNewChat={newChat}
+        chatsRefreshKey={chatsRefreshKey}
       />
 
       <main className="flex-1 flex flex-col min-w-0">

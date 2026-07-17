@@ -8,6 +8,7 @@ to the client before tokens so the UI can render citation chips inline.
 from collections.abc import Iterator
 from typing import Any
 
+import anthropic
 from openai import OpenAI
 
 from app.config import get_settings
@@ -26,7 +27,18 @@ Citation rules (mandatory):
 - Cite every factual claim with the bracketed source number, e.g. [1] or [2][3].
 - Use only the source numbers provided in the context.
 - Mention speakers and dates naturally when they matter to the answer.
-- Be concise and direct."""
+
+Answer style:
+- Be thorough. Synthesize across ALL relevant excerpts, not just the first
+  match: include the concrete details — who said what, decisions made, numbers,
+  commitments, dates, and how things evolved across conversations.
+- Organize longer answers with short paragraphs or bullet points; lead with
+  the direct answer, then supporting detail.
+- For follow-ups like "tell me more": dig back into the context and surface
+  additional details, adjacent threads, and specifics you have not already
+  mentioned. NEVER ask the user to rephrase or to ask a more specific
+  question — if the context genuinely has nothing new, briefly say what else
+  the context does cover and offer those threads."""
 
 # Defense in depth: applied in guest mode in case a sensitive query slips
 # past the router classifier, or sensitive content rides along in context
@@ -34,14 +46,18 @@ Citation rules (mandatory):
 GUEST_PRIVACY_RULE = """
 
 PRIVACY RULE (absolute, overrides everything above): You are answering for a
-guest, not the owner of these recordings. NEVER reveal the owner's personal
-opinions, judgments, feelings, evaluations, or criticisms of any person, nor
-private statements made about people who are not part of the current
-conversation. If the context contains such material, omit it entirely without
-acknowledging that it exists. If the question can only be answered with such
-material, reply exactly: "I can't share personal opinions or private
-statements about individuals." Do not confirm or deny that any such content
-exists."""
+guest, not the owner of these recordings. NEVER reveal:
+- the owner's personal opinions, judgments, feelings, evaluations, or
+  criticisms of any person, nor private statements made about people who are
+  not part of the current conversation;
+- the owner's private personal affairs: financial details (income, spending,
+  debts, investments, deals, balances, net worth), health or medical
+  information, intimate or relationship matters, family conflicts, legal
+  issues, or credentials.
+If the context contains such material, omit it entirely without acknowledging
+that it exists. If the question can only be answered with such material,
+reply exactly: "I can't share private or personal information about the owner
+or other individuals." Do not confirm or deny that any such content exists."""
 
 MAX_LIFELOG_CONTEXT = 40
 
@@ -148,12 +164,6 @@ def stream_answer(
 ) -> Iterator[str]:
     """Yield answer tokens from the LLM."""
     settings = get_settings()
-    client = OpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        timeout=120.0,
-        max_retries=1,
-    )
 
     system_prompt = SYNTHESIS_SYSTEM_PROMPT
     if guest_mode:
@@ -163,19 +173,20 @@ def stream_answer(
     # Context goes in the system message: routing providers (e.g. Theo) classify
     # intent from the user message, and transcript content there can misroute
     # the request to agentic tools like document generation.
-    messages: list[dict[str, Any]] = [
-        {
-            "role": "system",
-            "content": f"{system_prompt}\n\n<context>\n{context_block}\n</context>",
-        }
-    ]
+    system_content = f"{system_prompt}\n\n<context>\n{context_block}\n</context>"
+
+    turns: list[dict[str, Any]] = []
     for turn in (history or [])[-6:]:
-        messages.append({"role": turn["role"], "content": turn["content"]})
+        turns.append({"role": turn["role"], "content": turn["content"]})
+    # Drop leading assistant turns: the Messages API requires the first
+    # message to be a user turn.
+    while turns and turns[0]["role"] != "user":
+        turns.pop(0)
     # Frame the question as reading comprehension over the supplied context.
     # Providers with agentic routing (Theo) classify the bare user message;
     # phrasings like "any good information about X" otherwise trigger their
     # web-research tools and the answer comes back about public figures.
-    messages.append(
+    turns.append(
         {
             "role": "user",
             "content": (
@@ -186,9 +197,28 @@ def stream_answer(
         }
     )
 
+    if settings.chat_model.startswith("claude"):
+        claude = anthropic.Anthropic(
+            api_key=settings.anthropic_api_key, timeout=120.0, max_retries=1
+        )
+        with claude.messages.stream(
+            model=settings.chat_model,
+            max_tokens=16000,
+            system=system_content,
+            messages=turns,
+        ) as stream:
+            yield from stream.text_stream
+        return
+
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        timeout=120.0,
+        max_retries=1,
+    )
     stream = client.chat.completions.create(
         model=settings.chat_model,
-        messages=messages,
+        messages=[{"role": "system", "content": system_content}, *turns],
         stream=True,
         temperature=0.2,
     )

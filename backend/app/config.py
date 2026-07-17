@@ -30,8 +30,12 @@ class Settings(BaseSettings):
     # Use the www host for Theo: the apex domain 307-redirects and strips auth headers.
     openai_api_key: str = ""
     openai_base_url: str | None = None
-    chat_model: str = "gpt-4o"
-    router_model: str = "gpt-4o-mini"
+
+    # Anthropic (Claude). Models starting with "claude" route to this client;
+    # anything else goes through the OpenAI-compatible client above.
+    anthropic_api_key: str = ""
+    chat_model: str = "claude-opus-4-8"
+    router_model: str = "claude-haiku-4-5"
 
     # Optional dedicated provider for graph entity-extraction (Graphiti). Bulk
     # extraction is heavy/structured and benefits from a fast, reliable model
