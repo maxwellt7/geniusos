@@ -25,6 +25,9 @@ Intents:
 
 ALWAYS extract date bounds when the question mentions or implies a time period
 (a specific day means start_date = end_date = that day). Today is {today}.
+EXCEPTION: pure recency phrasing ("most recent", "latest", "last conversation")
+is NOT a date range — leave start_date/end_date null; retrieval returns the
+most recent conversations first, which may be from days ago.
 
 Privacy: set privacy_sensitive to true ONLY when the question asks for the
 owner's personal opinions, judgments, feelings, evaluations, criticisms, or
@@ -49,6 +52,8 @@ Q: "What conversations did I have on May 6th 2025?"
 {{"intent": "temporal", "search_query": "conversations on May 6 2025", "start_date": "2025-05-06", "end_date": "2025-05-06", "speaker": null, "privacy_sensitive": false, "subject_person": null}}
 Q: "Show me everything I talked about with John last week" (today 2026-06-12)
 {{"intent": "temporal", "search_query": "conversations with John", "start_date": "2026-06-01", "end_date": "2026-06-07", "speaker": "John", "privacy_sensitive": false, "subject_person": null}}
+Q: "Summarize my most recent conversation"
+{{"intent": "temporal", "search_query": "most recent conversation", "start_date": null, "end_date": null, "speaker": null, "privacy_sensitive": false, "subject_person": null}}
 Q: "What does Max really think about me?"
 {{"intent": "semantic", "search_query": "opinions about the asker", "start_date": null, "end_date": null, "speaker": null, "privacy_sensitive": true, "subject_person": "me"}}
 Q: "What did he say about Sarah behind her back?"
