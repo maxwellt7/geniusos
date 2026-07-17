@@ -2,7 +2,7 @@
 and the Graphiti knowledge graph (relational)."""
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy import select
@@ -28,13 +28,27 @@ class RetrievedContext:
 def _semantic_search(routed: RoutedQuery, top_k: int = 12) -> list[dict[str, Any]]:
     try:
         store = PineconeStore()
-        return store.search(
+        results = store.search(
             routed.search_query,
             top_k=top_k,
             start=routed.start_date,
             end=routed.end_date,
             speaker=routed.speaker,
         )
+        if not results and routed.speaker:
+            # Speaker labels are unreliable (Limitless often leaves speakers
+            # unnamed), so an empty speaker-filtered result usually means the
+            # filter was wrong, not that the content doesn't exist. Retry
+            # without it; the model still sees who spoke via chunk metadata.
+            logger.info("Speaker filter %r matched nothing; retrying unfiltered", routed.speaker)
+            results = store.search(
+                routed.search_query,
+                top_k=top_k,
+                start=routed.start_date,
+                end=routed.end_date,
+                speaker=None,
+            )
+        return results
     except Exception:
         logger.exception("Semantic search failed; continuing without vector results")
         return []
@@ -133,6 +147,9 @@ async def retrieve(session: Session, routed: RoutedQuery) -> RetrievedContext:
         ctx.chunks = _semantic_search(routed, top_k=10)
     elif routed.intent == "temporal":
         ctx.lifelogs = _temporal_search(session, routed)
+        if not ctx.lifelogs and routed.speaker:
+            # Same speaker-label unreliability as semantic search.
+            ctx.lifelogs = _temporal_search(session, replace(routed, speaker=None))
         if routed.search_query:
             ctx.chunks = _semantic_search(routed, top_k=10)
     else:  # semantic
