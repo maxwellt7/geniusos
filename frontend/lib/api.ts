@@ -56,7 +56,9 @@ export async function fetchPrivacyStatus(): Promise<PrivacyStatus> {
 export async function unlockOwner(pin: string): Promise<boolean> {
   const res = await fetch(`${API_BASE}/api/privacy/unlock`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    // authHeaders carries the Clerk token: without it the backend 401s
+    // (Clerk gates every route) and the UI misreads it as a wrong PIN.
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify({ pin }),
   });
   if (res.status === 401) return false;
