@@ -7,6 +7,7 @@ lifelog, Pinecone records use deterministic IDs, and a watermark on lifelog
 
 import asyncio
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -178,18 +179,50 @@ def run_sync(full: bool = False) -> dict:
     result = {"lifelogs_synced": synced, "watermark": max_updated.isoformat() if max_updated else None}
 
     if settings.enable_graph_ingestion:
-        graph_result = asyncio.run(ingest_graph_pending())
+        graph_result = _run_graph_ingestion()
         result["graph_episodes_added"] = graph_result["episodes_added"]
 
     return result
 
 
+# Dedicated, persistent event loop for graph ingestion. asyncio.run() per
+# sync would create a fresh loop each time, invalidating the reusable
+# GraphService (its neo4j async driver binds to the loop it was created on).
+_ingest_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _run_graph_ingestion() -> dict:
+    global _ingest_loop
+    if _ingest_loop is None:
+        _ingest_loop = asyncio.new_event_loop()
+        threading.Thread(
+            target=_ingest_loop.run_forever, name="graph-ingest-loop", daemon=True
+        ).start()
+    future = asyncio.run_coroutine_threadsafe(ingest_graph_pending(), _ingest_loop)
+    return future.result()
+
+
+# Process-wide graph service for ingestion. GraphService loads two torch
+# models (MiniLM embedder + BGE reranker) in __init__; instantiating it per
+# sync leaked memory/threads until the container died ("Resource temporarily
+# unavailable" after ~a day of 30-minute scheduled syncs). Load once, reuse.
+_ingest_service = None
+
+
+async def _get_ingest_service():
+    global _ingest_service
+    if _ingest_service is None:
+        from app.graph.graphiti_service import GraphService
+
+        service = GraphService()
+        await service.initialize()
+        _ingest_service = service
+    return _ingest_service
+
+
 async def ingest_graph_pending(limit: int | None = None) -> dict:
     """Ingest lifelogs that haven't been added to the knowledge graph yet."""
-    from app.graph.graphiti_service import GraphService
-
-    service = GraphService()
-    await service.initialize()
+    service = await _get_ingest_service()
     added = 0
     failed = 0
     try:
@@ -243,7 +276,14 @@ async def ingest_graph_pending(limit: int | None = None) -> dict:
             added += 1
             if added % 10 == 0:
                 logger.info("Graph ingestion progress: %d episodes added", added)
-    finally:
-        await service.close()
+    except Exception:
+        # Drop the (possibly wedged) service so the next sync reconnects fresh.
+        global _ingest_service
+        _ingest_service = None
+        try:
+            await service.close()
+        except Exception:
+            logger.exception("Error closing graph service after failure")
+        raise
 
     return {"episodes_added": added, "failed": failed}
